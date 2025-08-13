@@ -201,14 +201,14 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 
 		// 写入接口标题
 		file.WriteString(fmt.Sprintf("## %s\n\n", op.Summary))
-		file.WriteString(fmt.Sprintf("\n接口地址：%s", item.path))
-		file.WriteString(fmt.Sprintf("\n请求方式：%s", strings.ToUpper(item.method)))
+		file.WriteString(fmt.Sprintf("\n接口地址：%s\n", item.path))
+		file.WriteString(fmt.Sprintf("\n请求方式：%s\n", strings.ToUpper(item.method)))
 		if strings.TrimSpace(op.Description) != "" {
-			file.WriteString(fmt.Sprintf("\n接口描述：%s", op.Description))
+			file.WriteString(fmt.Sprintf("\n接口描述：%s\n", op.Description))
 		}
 		// 写入参数表
 		if len(op.Parameters) > 0 {
-			file.WriteString("\n\n**请求参数:**\n\n")
+			file.WriteString("\n**请求参数:**\n\n")
 			file.WriteString("| 名称 | 类型 | 是否必填 | 描述 |\n")
 			file.WriteString("|------|------|------|------|\n")
 
