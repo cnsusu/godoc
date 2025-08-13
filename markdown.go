@@ -27,6 +27,13 @@ type Definition struct {
 	Type       string              `json:"type"`
 	Properties map[string]Property `json:"properties"`
 	Required   []string            `json:"required"`
+	AllOf      []AllOfItem         `json:"allOf"` // 添加 allOf 支持
+}
+
+type AllOfItem struct {
+	Ref        string              `json:"$ref"`
+	Type       string              `json:"type"`
+	Properties map[string]Property `json:"properties"`
 }
 
 type Property struct {
@@ -36,6 +43,7 @@ type Property struct {
 	Ref         string      `json:"$ref"`
 	Items       *Items      `json:"items"`
 	Properties  interface{} `json:"properties"` // 用于处理嵌套对象
+	AllOf       []AllOfItem `json:"allOf"`      // 添加 allOf 支持
 }
 
 type Items struct {
@@ -63,6 +71,9 @@ type Schema struct {
 	Ref   string `json:"$ref"`
 	Type  string `json:"type"`
 	Items *Items `json:"items"`
+	AllOf []struct {
+		Ref string `json:"$ref"`
+	} `json:"allOf"` // 添加 allOf 支持
 }
 
 type ResponseValue struct {
@@ -200,17 +211,17 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 		json.Unmarshal(opData, &op)
 
 		// 写入接口标题
-		file.WriteString(fmt.Sprintf("## %s\n\n", op.Summary))
-		file.WriteString(fmt.Sprintf("\n接口地址：%s\n", item.path))
-		file.WriteString(fmt.Sprintf("\n请求方式：%s\n", strings.ToUpper(item.method)))
+		file.WriteString(fmt.Sprintf("### %s\n\n", op.Summary))
+		file.WriteString(fmt.Sprintf("**接口地址**：`%s`  \n", item.path))
+		file.WriteString(fmt.Sprintf("**请求方式**：`%s`  \n", strings.ToUpper(item.method)))
 		if strings.TrimSpace(op.Description) != "" {
-			file.WriteString(fmt.Sprintf("\n接口描述：%s\n", op.Description))
+			file.WriteString(fmt.Sprintf("**接口描述**：%s  \n", op.Description))
 		}
 		// 写入参数表
 		if len(op.Parameters) > 0 {
 			file.WriteString("\n**请求参数:**\n\n")
 			file.WriteString("| 名称 | 类型 | 是否必填 | 描述 |\n")
-			file.WriteString("|------|------|------|------|\n")
+			file.WriteString("|------|------|----------|------|\n")
 
 			for _, param := range op.Parameters {
 				// 处理引用类型参数
@@ -247,17 +258,20 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 				if param.Required {
 					required = "是"
 				}
-				file.WriteString(fmt.Sprintf("| %s | `%s` | %v | %s |\n",
+				file.WriteString(fmt.Sprintf("| %s | `%s` | %s | %s |\n",
 					param.Name, paramType, required, param.Description))
 			}
 			file.WriteString("\n")
 		}
 
 		// 写入响应
-		for _, response := range op.Responses {
+		for status, response := range op.Responses {
+			file.WriteString(fmt.Sprintf("\n**响应状态**: %s\n", status))
+			file.WriteString(fmt.Sprintf("**描述**: %s\n", response.Description))
+
 			// 解析响应体结构
 			respSchema := response.Schema
-			if respSchema.Ref != "" || respSchema.Type != "" {
+			if respSchema.Ref != "" || respSchema.Type != "" || len(respSchema.AllOf) > 0 {
 				file.WriteString("\n**响应体结构**:\n\n")
 				s.writeResponseSchema(file, respSchema, defs, 0)
 			}
@@ -266,92 +280,86 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 	}
 }
 
+// 解决嵌套引用
+func (s *SwaggerMarkdown) resolveSchema(schema Schema, defs map[string]Definition) Definition {
+	if schema.Ref != "" {
+		refName := s.extractRefName(schema.Ref)
+		if def, exists := defs[refName]; exists {
+			return def
+		}
+	}
+	return Definition{}
+}
+
 // 写入定义字段
 func (s *SwaggerMarkdown) writeDefinitionFields(file *os.File, def Definition, defs map[string]Definition, indentLevel int) {
-	indent := strings.Repeat("", indentLevel)
+	// 处理 allOf 结构
+	for _, allOfItem := range def.AllOf {
+		if allOfItem.Ref != "" {
+			refName := s.extractRefName(allOfItem.Ref)
+			if nestedDef, exists := defs[refName]; exists {
+				s.writeDefinitionFields(file, nestedDef, defs, indentLevel)
+			}
+		} else if allOfItem.Properties != nil {
+			// 处理内联属性
+			file.WriteString("| 字段 | 类型 | 描述 |\n")
+			file.WriteString("|------|------|------|\n")
+			for field, prop := range allOfItem.Properties {
+				fieldType := s.getPropertyType(prop)
+				file.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, prop.Description))
+			}
+		}
+	}
 
 	if len(def.Properties) > 0 {
-		file.WriteString(fmt.Sprintf("%s| 字段 | 类型 | 描述 |\n", indent))
-		file.WriteString(fmt.Sprintf("%s|------|------|------|\n", indent))
+		file.WriteString("| 字段 | 类型 | 描述 |\n")
+		file.WriteString("|------|------|------|\n")
 
-		// 先收集需要后续处理的嵌套结构
-		var nestedStructs []struct {
-			fieldName string
-			def       Definition
-			indent    int
-		}
-		var nestedArrays []struct {
-			fieldName string
-			refName   string
-			indent    int
-		}
-
-		// 先处理普通字段
 		for field, prop := range def.Properties {
 			fieldType := s.getPropertyType(prop)
-			file.WriteString(fmt.Sprintf("%s| %s | `%s` | %s |\n",
-				indent, field, fieldType, prop.Description))
-
-			// 记录需要后续处理的嵌套结构
-			if prop.Properties != nil {
-				if nestedProps, ok := prop.Properties.(map[string]Property); ok {
-					nestedStructs = append(nestedStructs, struct {
-						fieldName string
-						def       Definition
-						indent    int
-					}{
-						fieldName: field,
-						def: Definition{
-							Properties: nestedProps,
-						},
-						indent: indentLevel + 1,
-					})
-				}
-			}
-
-			// 记录需要后续处理的嵌套引用
-			if prop.Ref != "" {
-				refName := s.extractRefName(prop.Ref)
-				if nestedDef, exists := defs[refName]; exists {
-					nestedStructs = append(nestedStructs, struct {
-						fieldName string
-						def       Definition
-						indent    int
-					}{
-						fieldName: field,
-						def:       nestedDef,
-						indent:    indentLevel + 1,
-					})
-				}
-			}
-
-			// 记录需要后续处理的数组类型
-			if prop.Type == "array" && prop.Items != nil && prop.Items.Ref != "" {
-				refName := s.extractRefName(prop.Items.Ref)
-				nestedArrays = append(nestedArrays, struct {
-					fieldName string
-					refName   string
-					indent    int
-				}{
-					fieldName: field,
-					refName:   refName,
-					indent:    indentLevel + 1,
-				})
-			}
+			file.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, prop.Description))
 		}
 		file.WriteString("\n")
 
-		// 处理收集的嵌套结构
-		for _, nested := range nestedStructs {
-			file.WriteString(fmt.Sprintf("%s**%s 结构详情**:\n\n", strings.Repeat("  ", nested.indent), nested.fieldName))
-			s.writeDefinitionFields(file, nested.def, defs, nested.indent)
-		}
+		// 处理嵌套结构
+		for field, prop := range def.Properties {
+			// 处理嵌套对象
+			if prop.Properties != nil {
+				if nestedProps, ok := prop.Properties.(map[string]interface{}); ok {
+					file.WriteString(fmt.Sprintf("%s**%s 结构详情**:\n\n", strings.Repeat("  ", indentLevel+1), field))
+					s.writeNestedFields(file, nestedProps, defs, indentLevel+1)
+				}
+			}
 
-		// 处理收集的数组类型
-		for _, arr := range nestedArrays {
-			if df, exists := defs[arr.refName]; exists {
-				file.WriteString(fmt.Sprintf("%s**%s 数组元素结构**:\n\n", strings.Repeat("  ", arr.indent), arr.fieldName))
-				s.writeDefinitionFields(file, df, defs, arr.indent)
+			// 处理嵌套引用
+			if prop.Ref != "" {
+				refName := s.extractRefName(prop.Ref)
+				if nestedDef, exists := defs[refName]; exists {
+					file.WriteString(fmt.Sprintf("%s**%s 结构详情**:\n\n", strings.Repeat("  ", indentLevel+1), field))
+					s.writeDefinitionFields(file, nestedDef, defs, indentLevel+1)
+				}
+			}
+
+			// 处理 allOf 结构
+			if len(prop.AllOf) > 0 {
+				for _, allOfItem := range prop.AllOf {
+					if allOfItem.Ref != "" {
+						refName := s.extractRefName(allOfItem.Ref)
+						if nestedDef, exists := defs[refName]; exists {
+							file.WriteString(fmt.Sprintf("%s**%s 结构详情**:\n\n", strings.Repeat("  ", indentLevel+1), field))
+							s.writeDefinitionFields(file, nestedDef, defs, indentLevel+1)
+						}
+					}
+				}
+			}
+
+			// 处理数组类型
+			if prop.Type == "array" && prop.Items != nil && prop.Items.Ref != "" {
+				refName := s.extractRefName(prop.Items.Ref)
+				if df, exists := defs[refName]; exists {
+					file.WriteString(fmt.Sprintf("%s**%s 数组元素结构**:\n\n", strings.Repeat("  ", indentLevel+1), field))
+					s.writeDefinitionFields(file, df, defs, indentLevel+1)
+				}
 			}
 		}
 	}
@@ -360,6 +368,19 @@ func (s *SwaggerMarkdown) writeDefinitionFields(file *os.File, def Definition, d
 // 写入响应体结构
 func (s *SwaggerMarkdown) writeResponseSchema(file *os.File, schema Schema, defs map[string]Definition, indentLevel int) {
 	indent := strings.Repeat("  ", indentLevel)
+
+	// 处理 allOf 结构
+	if len(schema.AllOf) > 0 {
+		for _, allOfItem := range schema.AllOf {
+			if allOfItem.Ref != "" {
+				refName := s.extractRefName(allOfItem.Ref)
+				if def, exists := defs[refName]; exists {
+					s.writeDefinitionFields(file, def, defs, indentLevel)
+				}
+			}
+		}
+		return
+	}
 
 	// 处理引用类型
 	if schema.Ref != "" {
@@ -429,6 +450,31 @@ func (s *SwaggerMarkdown) writeNestedFields(file *os.File, props map[string]inte
 					s.writeDefinitionFields(file, nestedDef, defs, indentLevel+1)
 				}
 			}
+
+			// 处理嵌套属性
+			if nestedProps, exists := propMap["properties"]; exists {
+				if nestedMap, ok := nestedProps.(map[string]interface{}); ok {
+					file.WriteString(fmt.Sprintf("%s\n**%s 结构详情**:\n\n", indent, field))
+					s.writeNestedFields(file, nestedMap, defs, indentLevel+1)
+				}
+			}
+
+			// 处理 allOf 结构
+			if allOf, exists := propMap["allOf"]; exists {
+				if allOfList, ok := allOf.([]interface{}); ok {
+					for _, item := range allOfList {
+						if allOfMap, ok := item.(map[string]interface{}); ok {
+							if ref, exists := allOfMap["$ref"]; exists {
+								refName := s.extractRefName(ref.(string))
+								if nestedDef, ext := defs[refName]; ext {
+									file.WriteString(fmt.Sprintf("%s\n**%s 结构详情**:\n\n", indent, field))
+									s.writeDefinitionFields(file, nestedDef, defs, indentLevel+1)
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }
@@ -460,6 +506,9 @@ func (s *SwaggerMarkdown) getPropertyType(prop Property) string {
 	}
 	if prop.Properties != nil {
 		return "object"
+	}
+	if len(prop.AllOf) > 0 {
+		return "object (allOf)"
 	}
 	return prop.Type
 }
