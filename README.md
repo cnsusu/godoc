@@ -2,9 +2,7 @@
    <strong>中文</strong> | <a href="./README.en.md">English</a>
 </p>
 
-<div align="center">
- # Swagger 转 Markdown 工具 (Go 实现)
-</div>
+# Swagger 转 Markdown 工具 (Go 实现)
 
 [![Go 代码质量](https://goreportcard.com/badge/github.com/cnsusu/swaggermarkdown)](https://goreportcard.com/report/github.com/cnsusu/swaggermarkdown)
 [![许可证: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -58,3 +56,4 @@ func main() {
 	}
 }
 ```
+
