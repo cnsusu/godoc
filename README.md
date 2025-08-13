@@ -1,4 +1,7 @@
-﻿# Swagger to Markdown Generator (Go)
+<p align="right">
+   <strong>中文</strong> | <a href="./README.en.md">English</a>
+</p>
+ # Swagger to Markdown Generator (Go)
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/cnsusu/swaggermarkdown)](https://goreportcard.com/report/github.com/cnsusu/swaggermarkdown)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -15,6 +18,7 @@
 ## 📥 Installation
 ```bash
 go get github.com/cnsusu/swaggermarkdow
+```
 
 ## 🚀 Basic Usage
 ```bash
@@ -51,3 +55,4 @@ func main() {
 	}
 
 }
+```
