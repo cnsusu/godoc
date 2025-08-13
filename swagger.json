@@ -161,39 +161,14 @@
                 },
                 "data": {
                     "description": "数据",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/response.UserQueryResult"
-                        }
-                    ]
-                },
-                "msg": {
-                    "description": "错误信息",
-                    "type": "string"
-                }
-            }
-        },
-        "response.UserQueryResult": {
-            "type": "object",
-            "properties": {
-                "list": {
-                    "description": "记录列表",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/response.UserInfo"
                     }
                 },
-                "page": {
-                    "description": "当前页码",
-                    "type": "integer"
-                },
-                "pageSize": {
-                    "description": "每页数量",
-                    "type": "integer"
-                },
-                "total": {
-                    "description": "记录数量",
-                    "type": "integer"
+                "msg": {
+                    "description": "错误信息",
+                    "type": "string"
                 }
             }
         },

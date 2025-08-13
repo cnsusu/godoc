@@ -45,9 +45,17 @@
 
 | 字段 | 类型 | 描述 |
 |------|------|------|
-| code | `integer` | 错误码 |
-| data | `` | 数据 |
 | msg | `string` | 错误信息 |
+| code | `integer` | 错误码 |
+| data | `[]response.UserInfo` | 数据 |
+
+  **data 数组元素结构**:
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| nick_name | `string` | 用户昵称 |
+| user_mobile | `string` | 手机号码 |
+| user_name | `string` | 用户姓名 |
 
 
 ---
