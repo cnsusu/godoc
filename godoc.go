@@ -1,4 +1,4 @@
-package godoc
+package swaggermarkdown
 
 import (
 	"encoding/json"
