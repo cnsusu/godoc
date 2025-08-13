@@ -20,15 +20,12 @@
 | user_name | `string` | 是 | 用户姓名 |
 
 
-**响应状态**: 200
-**描述**: 注册
-
 **响应体结构**:
 
 | 字段 | 类型 | 描述 |
 |------|------|------|
-| code | `integer` | 错误码 |
 | msg | `string` | 错误信息 |
+| code | `integer` | 错误码 |
 
 
 ---
@@ -44,9 +41,6 @@
 | user_mobile | `string` | 是 | 手机号码 |
 
 
-**响应状态**: 200
-**描述**: 查询
-
 **响应体结构**:
 
 | 字段 | 类型 | 描述 |
@@ -55,13 +49,13 @@
 | data | `[]response.UserInfo` | 数据 |
 | msg | `string` | 错误信息 |
 
-  **data 数组元素结构**:
+**data 数组元素结构**:
 
 | 字段 | 类型 | 描述 |
 |------|------|------|
+| user_mobile | `string` | 手机号码 |
 | user_name | `string` | 用户姓名 |
 | nick_name | `string` | 用户昵称 |
-| user_mobile | `string` | 手机号码 |
 
 
 ---
