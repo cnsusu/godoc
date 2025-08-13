@@ -208,7 +208,7 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 		}
 		// 写入参数表
 		if len(op.Parameters) > 0 {
-			file.WriteString("\n**请求参数:**\n\n")
+			file.WriteString("\n\n**请求参数:**\n\n")
 			file.WriteString("| 名称 | 类型 | 是否必填 | 描述 |\n")
 			file.WriteString("|------|------|------|------|\n")
 
