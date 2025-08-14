@@ -1,6 +1,7 @@
 package swaggermarkdown
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -120,8 +121,8 @@ func (s *SwaggerMarkdown) SetIgnored(param map[string]bool) {
 	s.IgnoredFields = param
 }
 
-// Generate 读取 swagger.json，生成 Markdown 文档
-func (s *SwaggerMarkdown) Generate(swaggerFilePath, markdownFilePath string) error {
+// GenerateFile 读取 swagger.json，生成 Markdown 文档
+func (s *SwaggerMarkdown) GenerateFile(swaggerFilePath, markdownFilePath string) error {
 	// 读取 swagger.json 文件
 	data, err := os.ReadFile(swaggerFilePath)
 	if err != nil {
@@ -142,30 +143,62 @@ func (s *SwaggerMarkdown) Generate(swaggerFilePath, markdownFilePath string) err
 	}
 	defer file.Close()
 
+	buf := new(bytes.Buffer)
+
 	// 写入文档头部
-	s.writeHeader(file, &swagger)
+	s.writeHeader(buf, &swagger)
 
 	// 处理路径和操作
-	s.writePaths(file, swagger.Paths, swagger.Definitions)
+	s.writePaths(buf, swagger.Paths, swagger.Definitions)
 
-	fmt.Println("Markdown 文档已生成: ", markdownFilePath)
+	file.WriteString(buf.String())
+
 	return nil
 }
 
-func (s *SwaggerMarkdown) writeHeader(file *os.File, swagger *Swagger) {
-	header := fmt.Sprintf(`# %s
+// GenerateByte 读取 swagger.json，生成 Markdown 文档
+func (s *SwaggerMarkdown) GenerateByte(data []byte) ([]byte, error) {
+	var err error
+	// 解析 JSON
+	var swagger Swagger
+	err = json.Unmarshal(data, &swagger)
+	if err != nil {
+		return nil, err
+	}
 
-**版本**: %s  
-**描述**: %s
+	// 创建并打开 Markdown 文件
+	buf := new(bytes.Buffer)
 
-## 接口概览
-`, swagger.Info.Title, swagger.Info.Version, swagger.Info.Description)
-	file.WriteString(header)
+	// 写入文档头部
+	s.writeHeader(buf, &swagger)
+
+	// 处理路径和操作
+	s.writePaths(buf, swagger.Paths, swagger.Definitions)
+
+	return buf.Bytes(), nil
 }
 
-func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}, defs map[string]Definition) {
-	file.WriteString("\n## 接口详情\n")
+func (s *SwaggerMarkdown) writeHeader(buf *bytes.Buffer, swagger *Swagger) {
+	var header = ``
+	if strings.TrimSpace(swagger.Info.Title) != "" {
+		header = fmt.Sprintf(`%s# %s`, header, swagger.Info.Title)
+	}
+	if strings.TrimSpace(swagger.Info.Version) != "" {
+		header = fmt.Sprintf(`%s
+**版本**: %s
 
+`, header, swagger.Info.Version)
+	}
+	if strings.TrimSpace(swagger.Info.Description) != "" {
+		header = fmt.Sprintf(`%s
+**描述**: %s
+
+`, header, swagger.Info.Description)
+	}
+	buf.WriteString(header)
+}
+
+func (s *SwaggerMarkdown) writePaths(buf *bytes.Buffer, paths map[string]interface{}, defs map[string]Definition) {
 	// 将路径转换为可排序的切片
 	type pathItem struct {
 		path   string
@@ -211,17 +244,17 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 		json.Unmarshal(opData, &op)
 
 		// 写入接口标题
-		file.WriteString(fmt.Sprintf("### %s\n\n", op.Summary))
-		file.WriteString(fmt.Sprintf("**接口地址**：`%s`  \n", item.path))
-		file.WriteString(fmt.Sprintf("**请求方式**：`%s`  \n", strings.ToUpper(item.method)))
+		buf.WriteString(fmt.Sprintf("### %s\n\n", op.Summary))
+		buf.WriteString(fmt.Sprintf("**接口地址**：`%s`  \n", item.path))
+		buf.WriteString(fmt.Sprintf("**请求方式**：`%s`  \n", strings.ToUpper(item.method)))
 		if strings.TrimSpace(op.Description) != "" {
-			file.WriteString(fmt.Sprintf("**接口描述**：%s  \n", op.Description))
+			buf.WriteString(fmt.Sprintf("**接口描述**：%s  \n", op.Description))
 		}
 		// 写入参数表
 		if len(op.Parameters) > 0 {
-			file.WriteString("\n**请求参数:**\n\n")
-			file.WriteString("| 名称 | 类型 | 是否必填 | 描述 |\n")
-			file.WriteString("|------|------|----------|------|\n")
+			buf.WriteString("\n**请求参数:**\n\n")
+			buf.WriteString("| 名称 | 类型 | 是否必填 | 描述 |\n")
+			buf.WriteString("|------|------|----------|------|\n")
 
 			for _, param := range op.Parameters {
 				// 处理引用类型参数
@@ -240,7 +273,7 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 							if s.contains(def.Required, field) {
 								required = "是"
 							}
-							file.WriteString(fmt.Sprintf("| %s | `%s` | %s | %s |\n",
+							buf.WriteString(fmt.Sprintf("| %s | `%s` | %s | %s |\n",
 								field, fieldType, required, prop.Description))
 						}
 						continue
@@ -258,10 +291,10 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 				if param.Required {
 					required = "是"
 				}
-				file.WriteString(fmt.Sprintf("| %s | `%s` | %s | %s |\n",
+				buf.WriteString(fmt.Sprintf("| %s | `%s` | %s | %s |\n",
 					param.Name, paramType, required, param.Description))
 			}
-			file.WriteString("\n")
+			buf.WriteString("\n")
 		}
 
 		// 写入响应
@@ -269,11 +302,11 @@ func (s *SwaggerMarkdown) writePaths(file *os.File, paths map[string]interface{}
 			// 解析响应体结构
 			respSchema := response.Schema
 			if respSchema.Ref != "" || respSchema.Type != "" || len(respSchema.AllOf) > 0 {
-				file.WriteString("\n**响应体结构**:\n\n")
-				s.writeResponseSchema(file, respSchema, defs)
+				buf.WriteString("\n**响应体结构**:\n\n")
+				s.writeResponseSchema(buf, respSchema, defs)
 			}
 		}
-		file.WriteString("\n---\n")
+		buf.WriteString("\n---\n")
 	}
 }
 
@@ -289,42 +322,42 @@ func (s *SwaggerMarkdown) resolveSchema(schema Schema, defs map[string]Definitio
 }
 
 // 写入定义字段
-func (s *SwaggerMarkdown) writeDefinitionFields(file *os.File, def Definition, defs map[string]Definition) {
+func (s *SwaggerMarkdown) writeDefinitionFields(buf *bytes.Buffer, def Definition, defs map[string]Definition) {
 	// 处理 allOf 结构
 	for _, allOfItem := range def.AllOf {
 		if allOfItem.Ref != "" {
 			refName := s.extractRefName(allOfItem.Ref)
 			if nestedDef, exists := defs[refName]; exists {
-				s.writeDefinitionFields(file, nestedDef, defs)
+				s.writeDefinitionFields(buf, nestedDef, defs)
 			}
 		} else if allOfItem.Properties != nil {
 			// 处理内联属性
-			file.WriteString("| 字段 | 类型 | 描述 |\n")
-			file.WriteString("|------|------|------|\n")
+			buf.WriteString("| 字段 | 类型 | 描述 |\n")
+			buf.WriteString("|------|------|------|\n")
 			for field, prop := range allOfItem.Properties {
 				fieldType := s.getPropertyType(prop)
-				file.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, prop.Description))
+				buf.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, prop.Description))
 			}
 		}
 	}
 
 	if len(def.Properties) > 0 {
-		file.WriteString("| 字段 | 类型 | 描述 |\n")
-		file.WriteString("|------|------|------|\n")
+		buf.WriteString("| 字段 | 类型 | 描述 |\n")
+		buf.WriteString("|------|------|------|\n")
 
 		for field, prop := range def.Properties {
 			fieldType := s.getPropertyType(prop)
-			file.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, prop.Description))
+			buf.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, prop.Description))
 		}
-		file.WriteString("\n")
+		buf.WriteString("\n")
 
 		// 处理嵌套结构
 		for field, prop := range def.Properties {
 			// 处理嵌套对象
 			if prop.Properties != nil {
 				if nestedProps, ok := prop.Properties.(map[string]interface{}); ok {
-					file.WriteString(fmt.Sprintf("**%s 结构详情**:\n\n", field))
-					s.writeNestedFields(file, nestedProps, defs)
+					buf.WriteString(fmt.Sprintf("**%s 结构详情**:\n\n", field))
+					s.writeNestedFields(buf, nestedProps, defs)
 				}
 			}
 
@@ -332,8 +365,8 @@ func (s *SwaggerMarkdown) writeDefinitionFields(file *os.File, def Definition, d
 			if prop.Ref != "" {
 				refName := s.extractRefName(prop.Ref)
 				if nestedDef, exists := defs[refName]; exists {
-					file.WriteString(fmt.Sprintf("**%s 结构详情**:\n\n", field))
-					s.writeDefinitionFields(file, nestedDef, defs)
+					buf.WriteString(fmt.Sprintf("**%s 结构详情**:\n\n", field))
+					s.writeDefinitionFields(buf, nestedDef, defs)
 				}
 			}
 
@@ -343,8 +376,8 @@ func (s *SwaggerMarkdown) writeDefinitionFields(file *os.File, def Definition, d
 					if allOfItem.Ref != "" {
 						refName := s.extractRefName(allOfItem.Ref)
 						if nestedDef, exists := defs[refName]; exists {
-							file.WriteString(fmt.Sprintf("**%s 结构详情**:\n\n", field))
-							s.writeDefinitionFields(file, nestedDef, defs)
+							buf.WriteString(fmt.Sprintf("**%s 结构详情**:\n\n", field))
+							s.writeDefinitionFields(buf, nestedDef, defs)
 						}
 					}
 				}
@@ -354,8 +387,8 @@ func (s *SwaggerMarkdown) writeDefinitionFields(file *os.File, def Definition, d
 			if prop.Type == "array" && prop.Items != nil && prop.Items.Ref != "" {
 				refName := s.extractRefName(prop.Items.Ref)
 				if df, exists := defs[refName]; exists {
-					file.WriteString(fmt.Sprintf("**%s 数组元素结构**:\n\n", field))
-					s.writeDefinitionFields(file, df, defs)
+					buf.WriteString(fmt.Sprintf("**%s 数组元素结构**:\n\n", field))
+					s.writeDefinitionFields(buf, df, defs)
 				}
 			}
 		}
@@ -363,14 +396,14 @@ func (s *SwaggerMarkdown) writeDefinitionFields(file *os.File, def Definition, d
 }
 
 // 写入响应体结构
-func (s *SwaggerMarkdown) writeResponseSchema(file *os.File, schema Schema, defs map[string]Definition) {
+func (s *SwaggerMarkdown) writeResponseSchema(buf *bytes.Buffer, schema Schema, defs map[string]Definition) {
 	// 处理 allOf 结构
 	if len(schema.AllOf) > 0 {
 		for _, allOfItem := range schema.AllOf {
 			if allOfItem.Ref != "" {
 				refName := s.extractRefName(allOfItem.Ref)
 				if def, exists := defs[refName]; exists {
-					s.writeDefinitionFields(file, def, defs)
+					s.writeDefinitionFields(buf, def, defs)
 				}
 			}
 		}
@@ -381,7 +414,7 @@ func (s *SwaggerMarkdown) writeResponseSchema(file *os.File, schema Schema, defs
 	if schema.Ref != "" {
 		refName := s.extractRefName(schema.Ref)
 		if def, exists := defs[refName]; exists {
-			s.writeDefinitionFields(file, def, defs)
+			s.writeDefinitionFields(buf, def, defs)
 			return
 		}
 	}
@@ -390,10 +423,10 @@ func (s *SwaggerMarkdown) writeResponseSchema(file *os.File, schema Schema, defs
 	if schema.Type == "array" && schema.Items != nil {
 		if schema.Items.Ref != "" {
 			refName := s.extractRefName(schema.Items.Ref)
-			file.WriteString(fmt.Sprintf("数组类型: `[]%s`\n\n", refName))
+			buf.WriteString(fmt.Sprintf("数组类型: `[]%s`\n\n", refName))
 			if def, exists := defs[refName]; exists {
-				file.WriteString(fmt.Sprintf("**数组元素结构**:\n\n"))
-				s.writeDefinitionFields(file, def, defs)
+				buf.WriteString(fmt.Sprintf("**数组元素结构**:\n\n"))
+				s.writeDefinitionFields(buf, def, defs)
 			}
 			return
 		}
@@ -401,15 +434,15 @@ func (s *SwaggerMarkdown) writeResponseSchema(file *os.File, schema Schema, defs
 
 	// 处理基本类型
 	if schema.Type != "" {
-		file.WriteString(fmt.Sprintf("`%s`\n", schema.Type))
+		buf.WriteString(fmt.Sprintf("`%s`\n", schema.Type))
 	}
 }
 
 // 写入嵌套字段
-func (s *SwaggerMarkdown) writeNestedFields(file *os.File, props map[string]interface{}, defs map[string]Definition) {
+func (s *SwaggerMarkdown) writeNestedFields(buf *bytes.Buffer, props map[string]interface{}, defs map[string]Definition) {
 
-	file.WriteString("| 字段 | 类型 | 描述 |\n")
-	file.WriteString("|------|------|------|\n")
+	buf.WriteString("| 字段 | 类型 | 描述 |\n")
+	buf.WriteString("|------|------|------|\n")
 
 	for field, prop := range props {
 		if propMap, ok := prop.(map[string]interface{}); ok {
@@ -433,22 +466,22 @@ func (s *SwaggerMarkdown) writeNestedFields(file *os.File, props map[string]inte
 				description = desc.(string)
 			}
 
-			file.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, description))
+			buf.WriteString(fmt.Sprintf("| %s | `%s` | %s |\n", field, fieldType, description))
 
 			// 递归处理嵌套引用
 			if ref, exists := propMap["$ref"]; exists {
 				refName := s.extractRefName(ref.(string))
 				if nestedDef, ext := defs[refName]; ext {
-					file.WriteString(fmt.Sprintf("\n**嵌套引用**: %s\n\n", refName))
-					s.writeDefinitionFields(file, nestedDef, defs)
+					buf.WriteString(fmt.Sprintf("\n**嵌套引用**: %s\n\n", refName))
+					s.writeDefinitionFields(buf, nestedDef, defs)
 				}
 			}
 
 			// 处理嵌套属性
 			if nestedProps, exists := propMap["properties"]; exists {
 				if nestedMap, ok := nestedProps.(map[string]interface{}); ok {
-					file.WriteString(fmt.Sprintf("\n**%s 结构详情**:\n\n", field))
-					s.writeNestedFields(file, nestedMap, defs)
+					buf.WriteString(fmt.Sprintf("\n**%s 结构详情**:\n\n", field))
+					s.writeNestedFields(buf, nestedMap, defs)
 				}
 			}
 
@@ -460,8 +493,8 @@ func (s *SwaggerMarkdown) writeNestedFields(file *os.File, props map[string]inte
 							if ref, exists := allOfMap["$ref"]; exists {
 								refName := s.extractRefName(ref.(string))
 								if nestedDef, ext := defs[refName]; ext {
-									file.WriteString(fmt.Sprintf("\n**%s 结构详情**:\n\n", field))
-									s.writeDefinitionFields(file, nestedDef, defs)
+									buf.WriteString(fmt.Sprintf("\n**%s 结构详情**:\n\n", field))
+									s.writeDefinitionFields(buf, nestedDef, defs)
 								}
 							}
 						}

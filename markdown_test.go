@@ -21,7 +21,7 @@ func TestGenerateMarkdown(t *testing.T) {
 	swaggerMarkdown := NewSwaggerMarkdown()
 	swaggerMarkdown.SetOrder(customOrder)
 	swaggerMarkdown.SetIgnored(ignoredFields)
-	err := swaggerMarkdown.Generate("swagger.json", "swagger.md")
+	err := swaggerMarkdown.GenerateFile("swagger.json", "swagger.md")
 	if err == nil {
 		log.Println(err)
 	}
