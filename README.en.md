@@ -46,10 +46,9 @@ func main() {
 	swaggerMarkdown := swaggermarkdown.NewSwaggerMarkdown()
 	swaggerMarkdown.SetOrder(customOrder)
 	swaggerMarkdown.SetIgnored(ignoredFields)
-	swaggerMarkdown.SetTitle("My API Documentation") // Custom title
 
 	// Generate documentation
-	err := swaggerMarkdown.Generate("swagger.json", "API_Documentation.md")
+	err := swaggerMarkdown.GenerateFile("swagger.json", "API_Documentation.md")
 	if err != nil {
 		log.Fatal("Generation failed: ", err)
 	}

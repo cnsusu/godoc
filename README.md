@@ -47,10 +47,9 @@ func main() {
 	swaggerMarkdown := swaggermarkdown.NewSwaggerMarkdown()
 	swaggerMarkdown.SetOrder(customOrder)
 	swaggerMarkdown.SetIgnored(ignoredFields)
-	swaggerMarkdown.SetTitle("我的API文档") // 自定义标题
 
 	// 生成文档
-	err := swaggerMarkdown.Generate("swagger.json", "API文档.md")
+	err := swaggerMarkdown.GenerateFile("swagger.json", "API文档.md")
 	if err != nil {
 		log.Fatal("文档生成失败: ", err)
 	}
